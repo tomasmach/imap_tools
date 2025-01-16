@@ -12,6 +12,11 @@ from typing import Tuple, Dict, Optional, List
 from .utils import decode_value, parse_email_addresses, parse_email_date, EmailAddress, replace_html_ct_charset
 from .consts import UID_PATTERN, CODECS_OFFICIAL_REPLACEMENT_CHAR
 
+try:
+    from functools import cached_property
+except ImportError:
+    def cached_property(f):
+        return cached_property(lru_cache()(f))
 
 class MailMessage:
     """The email message"""
@@ -52,8 +57,7 @@ class MailMessage:
                 raw_message_data = fetch_item[1]
         return raw_message_data, raw_uid_data, raw_flag_data
 
-    @property
-    @lru_cache()
+    @cached_property
     def uid(self) -> Optional[str]:
         """Message UID"""
         # _raw_uid_data - zimbra, yandex, gmail, gmx
@@ -64,8 +68,7 @@ class MailMessage:
                 return uid_match.group('uid')
         return None
 
-    @property
-    @lru_cache()
+    @cached_property
     def size_rfc822(self) -> int:
         """RFC822 message size from server, bytes count, 0 if not found"""
         for raw_flag_item in self._raw_flag_data:
@@ -74,14 +77,11 @@ class MailMessage:
                 return int(size_match.group('size'))
         return 0
 
-    @property
-    @lru_cache()
     def size(self) -> int:
         """Message size, bytes count"""
         return len(bytes(self.obj))
 
-    @property
-    @lru_cache()
+    @cached_property
     def flags(self) -> Tuple[str, ...]:
         """
         Message flags
@@ -92,8 +92,7 @@ class MailMessage:
             result.extend(imaplib.ParseFlags(raw_flag_item))
         return tuple(i.decode().strip() for i in result)  # noqa
 
-    @property
-    @lru_cache()
+    @cached_property
     def subject(self) -> str:
         """Message subject"""
         if 'subject' in self.obj:
@@ -101,81 +100,68 @@ class MailMessage:
             return ''.join(decode_value(*head_part) for head_part in decode_header(raw))
         return ''
 
-    @property
-    @lru_cache()
+    @cached_property
     def from_values(self) -> Optional[EmailAddress]:
         """Sender (all data)"""
         result_set = parse_email_addresses(self.obj['From'] or '')
         return result_set[0] if result_set else None
 
-    @property
-    @lru_cache()
+    @cached_property
     def from_(self) -> str:
         """Sender email"""
         return self.from_values.email if self.from_values else ''
 
-    @property
-    @lru_cache()
+    @cached_property
     def to_values(self) -> Tuple[EmailAddress, ...]:
         """Recipients (all data)"""
         return tuple(chain(*(parse_email_addresses(i or '') for i in self.obj.get_all('To', []))))
 
-    @property
-    @lru_cache()
+    @cached_property
     def to(self) -> Tuple[str, ...]:
         """Recipients emails"""
         return tuple(i.email for i in self.to_values)
 
-    @property
-    @lru_cache()
+    @cached_property
     def cc_values(self) -> Tuple[EmailAddress, ...]:
         """Carbon copy (all data)"""
         return tuple(chain(*(parse_email_addresses(i or '') for i in self.obj.get_all('Cc', []))))
 
-    @property
-    @lru_cache()
+    @cached_property
     def cc(self) -> Tuple[str, ...]:
         """Carbon copy emails"""
         return tuple(i.email for i in self.cc_values)
 
-    @property
-    @lru_cache()
+    @cached_property
     def bcc_values(self) -> Tuple[EmailAddress, ...]:
         """Blind carbon copy (all data)"""
         return tuple(chain(*(parse_email_addresses(i or '') for i in self.obj.get_all('Bcc', []))))
 
-    @property
-    @lru_cache()
+    @cached_property
     def bcc(self) -> Tuple[str, ...]:
         """Blind carbon copy emails"""
         return tuple(i.email for i in self.bcc_values)
 
-    @property
-    @lru_cache()
+    @cached_property
     def reply_to_values(self) -> Tuple[EmailAddress, ...]:
         """Reply-to emails (all data)"""
         return tuple(chain(*(parse_email_addresses(i or '') for i in self.obj.get_all('Reply-To', []))))
 
-    @property
-    @lru_cache()
+    @cached_property
     def reply_to(self) -> Tuple[str, ...]:
         """Reply-to emails"""
         return tuple(i.email for i in self.reply_to_values)
 
-    @property
-    @lru_cache()
+    @cached_property
     def date_str(self) -> str:
         """Message sent date string as is"""
         return str(self.obj['Date'] or '')
 
-    @property
-    @lru_cache()
+    @cached_property
     def date(self) -> datetime.datetime:
         """Message sent date"""
         return parse_email_date(self.date_str)
 
-    @property
-    @lru_cache()
+    @cached_property
     def text(self) -> str:
         """Plain text of the mail message"""
         results = []
@@ -186,8 +172,7 @@ class MailMessage:
                 results.append(decode_value(part.get_payload(decode=True), part.get_content_charset()))
         return ''.join(results)
 
-    @property
-    @lru_cache()
+    @cached_property
     def html(self) -> str:
         """HTML text of the mail message"""
         results = []
@@ -199,8 +184,7 @@ class MailMessage:
                 results.append(replace_html_ct_charset(html, 'utf-8'))
         return ''.join(results)
 
-    @property
-    @lru_cache()
+    @cached_property
     def headers(self) -> Dict[str, Tuple[str, ...]]:
         """
         Message headers
@@ -211,8 +195,7 @@ class MailMessage:
             result.setdefault(key.lower(), []).append(val)
         return {k: tuple(v) for k, v in result.items()}
 
-    @property
-    @lru_cache()
+    @cached_property
     def attachments(self) -> List['MailAttachment']:
         """
         Mail message attachments list
@@ -238,8 +221,7 @@ class MailAttachment:
     def __str__(self):
         return '<{} | {} | {} | {}>'.format(self.filename, self.content_type, self.content_disposition, self.content_id)
 
-    @property
-    @lru_cache()
+    @cached_property
     def filename(self) -> str:
         """
         Attachment filename
@@ -280,26 +262,22 @@ class MailAttachment:
 
         return attempt_1_filename
 
-    @property
-    @lru_cache()
+    @cached_property
     def content_id(self) -> str:
         if 'Content-ID' in self.part:
             raw = self.part['Content-ID']
             return ''.join(decode_value(*head_part) for head_part in decode_header(raw)).lstrip('<').rstrip('>')
         return ''
 
-    @property
-    @lru_cache()
+    @cached_property
     def content_type(self) -> str:
         return self.part.get_content_type()
 
-    @property
-    @lru_cache()
+    @cached_property
     def content_disposition(self) -> str:
         return self.part.get_content_disposition() or ''
 
-    @property
-    @lru_cache()
+    @cached_property
     def payload(self) -> bytes:
         payload = self.part.get_payload(decode=True)
         if payload:
@@ -318,8 +296,7 @@ class MailAttachment:
         # could not find payload
         return b''
 
-    @property
-    @lru_cache()
+    @cached_property
     def size(self) -> int:
         """Attachment size, bytes count"""
         return len(self.payload)
